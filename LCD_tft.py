@@ -3,6 +3,7 @@ import ili9341
 from xglcd_font import XglcdFont
 import time
 import api
+import gc
 
 bot_left = Pin(14, Pin.IN, Pin.PULL_UP)
 bot_right = Pin(13, Pin.IN, Pin.PULL_UP)
@@ -37,6 +38,35 @@ orange = ili9341.color565(255, 165, 0)
 
 font_xl = XglcdFont('lib/EspressoDolce18x24.c', 18, 24)
 font_xs = XglcdFont("lib/NeatoReduced5x7.c", 5, 7)
+
+columns_pines = [
+    Pin(2, Pin.OUT), Pin(13, Pin.OUT), Pin(32, Pin.OUT), Pin(33, Pin.OUT)
+]
+colums = [33, 32, 13, 2]
+
+rows_pines = [
+    Pin(19, Pin.IN, Pin.PULL_DOWN), Pin(14, Pin.IN, Pin.PULL_DOWN), Pin(21, Pin.IN, Pin.PULL_DOWN),
+    Pin(22, Pin.IN, Pin.PULL_DOWN), Pin(25, Pin.IN, Pin.PULL_DOWN)
+]
+rows = [19, 14, 21, 22, 25]
+
+buttons = [
+    ["S", "r", "^", "v"],
+    ["1", "2", "3", "+"],
+    ["4", "5", "r", "6"],
+    ["7", "8", "9", "*"],
+    ["0", "r", "x", "E"]
+]
+
+buttons_s = {
+    "1":"sin(", "2":"cos(", "3":"tan(", "+":"!", "5":"log(", "6":"/", "7":"pi", "8":"y",
+    "9":"z", "*":"^", "0":"(", "x":")"
+}
+
+buttons_a = {
+    "1":"sec(", "2":"csc(", "3":"cot(", "6":"root(", "*":"-", "0":".", "x":","    
+}
+values = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "*", "x")
 
 class Entry:
     def __init__(self, level):
@@ -83,7 +113,9 @@ class Entry:
         
     def del_leter(self):
         if self.idx != 0:
+            print(self.text)
             self.text = self.text[0:self.idx-1] + self.text[self.idx:]
+            print(self.text)
             self.idx -= 1
             self.show()
         else:
@@ -253,6 +285,7 @@ class System:
         self.rangex = [-20, 20]
         self.multiplier = "20"
         self.cualiti = "240"
+        self.key_mode = "N"
         
         main_menu_items = [
             Label(0, "Calculadora Sym", green),
@@ -262,7 +295,7 @@ class System:
             Button(5, "Integrar df [_/-f(x)]", lambda: self.router("integrate_def"), greenyellow, 220),
             Button(6, "Graficar [\_/^\]", lambda: self.router("grafic"), yellow, 220),
             Button(7, "Ver Ploter", lambda: self.solve("view_plot"), aqua, 220),
-            Button(8, "Siguiente ------>", lambda: self.route("second"), aqua, 220),
+            Button(8, "Siguiente ------>", lambda: self.router("second"), aqua, 220),
             
             Label(10, "-Andre-Wireframe", aqua)
         ]
@@ -303,7 +336,7 @@ class System:
             
             Label(10, "-Andre-Wireframe", green)
         ]
-        self.solve = Window(solve_items, backblue)
+        self.solve_window = Window(solve_items, backblue)
         
         fact_items = [
             Label(0, "Factorizar", yellow),
@@ -405,7 +438,7 @@ class System:
             self.page.show()
             
         elif route == "solve":
-            self.page = self.solve
+            self.page = self.solve_window
             self.page.show()
             
         elif route == "fact":
@@ -452,10 +485,10 @@ class System:
             result_entry.set(request)
             
         elif route == "solve":
-            entry = self.solve.get_element(0)
-            result_entry = self.solve.get_element(1)
+            entry = self.solve_window.get_element(0)
+            result_entry = self.solve_window.get_element(1)
             try:
-                request = api.solve(entry.get())
+                request = api.solve_window(entry.get())
             except:
                 request = "error"
             result_entry.set(request)
@@ -565,52 +598,130 @@ class System:
                 else:
                     self.plotter.grafic(points["x_points"], points["y_points"], red)
                     self.grafics.pop(0)
+                    
+    def buttons_funciton(self, button):
+        if button == "S":
+            if self.key_mode == "S":
+                self.key_mode = "A"
+            elif self.key_mode == "A":
+                self.key_mode = "N"
+            else:
+                self.key_mode = "S"
+            time.sleep(0.3)
+            
+        elif button == "v" and self.key_mode == "S":
+            try:
+                entry = self.page.get_active()
+                entry.scroll(1)
+                time.sleep(0.15)
+            except:
+                pass
+            
+        elif button == "v" and self.key_mode == "A":
+            if self.page == self.main_menu:
+                    pass
+            else:
+                self.page = self.main_menu
+                self.page.show()
+            
+        elif button == "^" and self.key_mode == "S":
+            try:
+                entry = self.page.get_active()
+                entry.scroll(-1)
+                time.sleep(0.15)
+            except:
+                pass
+            
+        elif button == "v":
+            try:
+                self.page.scroll(1)
+                time.sleep(0.15)
+            except:
+                pass
+        
+        elif button == "^":
+            try:
+                self.page.scroll(-1)
+                time.sleep(0.15)
+            except:
+                pass
+            
+        elif button == "E" and self.key_mode == "S":
+            try:
+                entry = self.page.get_active()
+                entry.write("=")
+                time.sleep(0.3)
+            except:
+                pass
+        
+        elif button == "E" and self.key_mode == "A":
+            try:
+                entry = self.page.get_active()
+                entry.write(self.ans)
+                time.sleep(0.3)
+            except:
+                pass
+        
+        elif button == "E":
+            if self.page == "grafic":
+                self.plotter.clean()
+                time.sleep(0.3)
+            else:
+                try:
+                    button = self.page.get_active()
+                    button.click()
+                    time.sleep(0.3)
+                except:
+                    pass
+                
+        elif button == "4" and self.key_mode == "S":
+            try:
+                entry = self.page.get_active()
+                entry.del_leter()
+                time.sleep(0.3)
+            except:
+                pass
+                
+        elif button in values and self.key_mode == "S":
+            try:
+                entry = self.page.get_active()
+                entry.write(buttons_s[button])
+                time.sleep(0.3)
+            except:
+                pass
+            
+        elif button in values and self.key_mode == "A":
+            try:
+                entry = self.page.get_active()
+                entry.write(buttons_a[button])
+                time.sleep(0.3)
+            except:
+                pass
+        
+        elif button in values:
+            try:
+                entry = self.page.get_active()
+                entry.write(button)
+                time.sleep(0.3)
+            except:
+                pass
     
     def loop(self):
         self.main_menu.show()
         while True:
-            if bot_right.value() == 0:
-                try:
-                    entry = self.page.get_active()
-                    entry.scroll(1)
-                    time.sleep(0.1)
-                except:
-                    pass
-            elif bot_left.value() == 0:
-                try:
-                    entry = self.page.get_active()
-                    entry.scroll(-1)
-                    time.sleep(0.1)
-                except:
-                    pass
-            elif bot_down.value() == 0:
-                try:
-                    self.page.scroll(1)
-                    time.sleep(0.1)
-                except:
-                    pass
-            elif bot_up.value() == 0:
-                try:
-                    self.page.scroll(-1)
-                    time.sleep(0.1)
-                except:
-                    pass
-            elif bot_exe.value() == 0:
-                if self.page == "grafic":
-                    self.plotter.clean()
-                    time.sleep(0.1)
-                else:
-                    try:
-                        button = self.page.get_active()
-                        button.click()
-                        time.sleep(0.1)
-                    except:
-                        pass
-            elif bot_back.value() == 0:
-                if self.page == self.main_menu:
-                    pass
-                else:
-                    self.page = self.main_menu
-                    self.main_menu.show()
+            for c in range(0, len(columns_pines)):
+                columns_pines[c].value(1)
+                
+                for r in range(0, len(rows_pines)):
+                    if rows_pines[r].value() == 1:
+                        print(buttons[r][c])
+                        self.buttons_funciton(buttons[r][c])
+                        
+                        while rows_pines[r].value == 1:
+                            time.sleep_ms(10)
+                        
+                columns_pines[c].value(0)
+                
+            time.sleep_ms(20)
         
 System().loop()
